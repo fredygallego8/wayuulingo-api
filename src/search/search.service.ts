@@ -32,7 +32,7 @@ export class SearchService {
     'https://d9ddcda9-6558-46f7-82c0-79a7c3f3d766.us-east4-0.gcp.cloud.qdrant.io';
   private readonly QDRANT_API_KEY =
     'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhY2Nlc3MiOiJtIn0.jE6hTCsyci6mcP_j70CdNO8IizCisMUdHPf3rl9BxnE';
-  private readonly GEMINI_API_KEY = process.env.GEMINI_API_KEY || 'AIzaSyCVZfPvgMBybt8IgkYJPf0tQgo-Pi8K1j0';
+  private readonly GEMINI_API_KEY = process.env.GEMINI_API_KEY || 'AIzaSyBJZ5VGZm3VFkJ7mvFkVYyP9PWemA0rnds';
   private readonly COLLECTION_NAME = 'wayuucollection';
 
   constructor() {
@@ -50,7 +50,7 @@ export class SearchService {
 
   async performSemanticSearch(
     query: string,
-    limit: number = 5,
+    limit: number = 10,
   ): Promise<AISearchResponse> {
     try {
       this.logger.log(`🔍 Iniciando búsqueda semántica para: ${query}`);
@@ -102,8 +102,8 @@ export class SearchService {
         },
       }));
 
-      // Generate AI response
-      const aiResponse = await this.generateAIResponse(query, results);
+      // Generate AI response using top 5 results for better context
+      const aiResponse = await this.generateAIResponse(query, results.slice(0, 5));
 
       this.logger.log('✅ Búsqueda completada exitosamente');
 
@@ -160,14 +160,15 @@ export class SearchService {
     searchResults: SearchResult[],
   ): Promise<string> {
     try {
-      // Prepare context from top 3 results
+      // Prepare context from top results with more detailed information
       const context = searchResults
-        .slice(0, 3)
+        .slice(0, 5)
         .map(
           (result, i) =>
             `\n--- Resultado ${i + 1} (Relevancia: ${result.score.toFixed(3)}) ---\n` +
             `Documento: ${result.payload.source}\n` +
-            `Contenido: ${result.payload.text.substring(0, 500)}\n`,
+            `Fragmento ${result.payload.chunk_index + 1}/${result.payload.total_chunks}\n` +
+            `Contenido: ${result.payload.text.substring(0, 800)}\n`,
         )
         .join('');
 
