@@ -124,34 +124,47 @@ export class SearchService {
 
   private async generateEmbedding(text: string): Promise<number[]> {
     try {
-      // Use a simple hash-based embedding for now since the collection expects 384 dimensions
-      // and the Gemini embedding model returns 768 dimensions
-      const words = text.toLowerCase().split(/\s+/);
-      const embedding = new Array(384).fill(0); // Match collection dimension
+      this.logger.log('🔄 Generating embedding using Gemini...');
 
-      // Generate embedding based on word hashes
+      // Use Gemini's embedding model for better semantic understanding
+      const result = await this.embeddingModel.embedContent(text);
+      const embedding = result.embedding.values;
+
+      this.logger.log(`✅ Gemini embedding generated, original length: ${embedding.length}`);
+
+      // Ensure correct dimension for Qdrant collection (384)
+      // Gemini returns 768-dim embeddings, Qdrant expects 384-dim
+      const finalEmbedding = embedding.length > 384 ? embedding.slice(0, 384) : embedding;
+
+      this.logger.log(`✅ Embedding truncated to ${finalEmbedding.length} dimensions for Qdrant`);
+
+      return finalEmbedding;
+    } catch (error) {
+      this.logger.error('❌ Error generating Gemini embedding:', error);
+      this.logger.log('🔄 Falling back to hash-based embedding...');
+
+      // Fallback to hash-based embedding if Gemini fails
+      const words = text.toLowerCase().split(/\s+/);
+      const embedding = new Array(384).fill(0);
+
       words.forEach((word, index) => {
         let hash = 0;
         for (let i = 0; i < word.length; i++) {
           hash = ((hash << 5) - hash) + word.charCodeAt(i);
-          hash = hash & hash; // Convert to 32 bits
+          hash = hash & hash;
         }
 
-        // Distribute the hash across the vector
         const baseIndex = (Math.abs(hash) + index) % embedding.length;
         for (let i = 0; i < 10 && baseIndex + i < embedding.length; i++) {
           embedding[baseIndex + i] += (hash % 100) / 100;
         }
       });
 
-      // Normalize the vector
-      const magnitude = Math.sqrt(
-        embedding.reduce((sum, val) => sum + val * val, 0),
-      );
-      return embedding.map((val) => val / magnitude);
-    } catch (error) {
-      this.logger.error('Error generating embedding:', error);
-      throw new Error('Failed to generate embedding');
+      const magnitude = Math.sqrt(embedding.reduce((sum, val) => sum + val * val, 0));
+      const normalizedEmbedding = embedding.map((val) => val / magnitude);
+
+      this.logger.log('✅ Fallback hash-based embedding generated');
+      return normalizedEmbedding;
     }
   }
 
