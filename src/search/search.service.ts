@@ -32,7 +32,7 @@ export class SearchService {
     'https://d9ddcda9-6558-46f7-82c0-79a7c3f3d766.us-east4-0.gcp.cloud.qdrant.io';
   private readonly QDRANT_API_KEY =
     'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhY2Nlc3MiOiJtIn0.jE6hTCsyci6mcP_j70CdNO8IizCisMUdHPf3rl9BxnE';
-  private readonly GEMINI_API_KEY = 'AIzaSyCVZfPvgMBybt8IgkYJPf0tQgo-Pi8K1j0';
+  private readonly GEMINI_API_KEY = process.env.GEMINI_API_KEY || 'AIzaSyCVZfPvgMBybt8IgkYJPf0tQgo-Pi8K1j0';
   private readonly COLLECTION_NAME = 'wayuucollection';
 
   constructor() {
