@@ -28,25 +28,40 @@ export class SearchService {
   private readonly genAI: GoogleGenerativeAI;
   private readonly embeddingModel: any;
 
-  private readonly QDRANT_URL =
-    'https://d9ddcda9-6558-46f7-82c0-79a7c3f3d766.us-east4-0.gcp.cloud.qdrant.io';
-  private readonly QDRANT_API_KEY = process.env.QDRANT_API_KEY ||
-    'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhY2Nlc3MiOiJtIn0.jE6hTCsyci6mcP_j70CdNO8IizCisMUdHPf3rl9BxnE';
-  private readonly GEMINI_API_KEY = process.env.GEMINI_API_KEY ||
-    'AIzaSyBJZ5VGZm3VFkJ7mvFkVYyP9PWemA0rnds';
-  private readonly COLLECTION_NAME = 'wayuucollection';
+  private readonly QDRANT_URL = process.env.QDRANT_URL;
+  private readonly QDRANT_API_KEY = process.env.QDRANT_API_KEY;
+  private readonly GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+  private readonly COLLECTION_NAME = process.env.COLLECTION_NAME;
 
   constructor() {
+    // Validate required environment variables
+    if (!this.QDRANT_URL) {
+      throw new Error('QDRANT_URL environment variable is required');
+    }
+    if (!this.QDRANT_API_KEY) {
+      throw new Error('QDRANT_API_KEY environment variable is required');
+    }
+    if (!this.GEMINI_API_KEY) {
+      throw new Error('GEMINI_API_KEY environment variable is required');
+    }
+    if (!this.COLLECTION_NAME) {
+      throw new Error('COLLECTION_NAME environment variable is required');
+    }
+
+    this.logger.log('🔧 Initializing Qdrant client...');
     this.qdrantClient = new QdrantClient({
       url: this.QDRANT_URL,
       apiKey: this.QDRANT_API_KEY,
       checkCompatibility: false,
     });
 
+    this.logger.log('🤖 Initializing Gemini AI client...');
     this.genAI = new GoogleGenerativeAI(this.GEMINI_API_KEY);
     this.embeddingModel = this.genAI.getGenerativeModel({
       model: 'text-embedding-004',
     });
+
+    this.logger.log('✅ SearchService initialized successfully');
   }
 
   async performSemanticSearch(
@@ -193,6 +208,9 @@ export class SearchService {
     searchResults: SearchResult[],
   ): Promise<string> {
     try {
+      this.logger.log(`🤖 [GEMINI] Starting AI response generation for query: "${query}"`);
+      this.logger.log(`📊 [GEMINI] Number of search results: ${searchResults.length}`);
+
       // Prepare context from top results with more detailed information
       const context = searchResults
         .slice(0, 5)
@@ -204,6 +222,8 @@ export class SearchService {
             `Contenido: ${result.payload.text.substring(0, 800)}\n`,
         )
         .join('');
+
+      this.logger.log(`📝 [GEMINI] Context prepared, length: ${context.length}`);
 
       const prompt = `Eres un asistente especializado en la lengua Wayuu. Responde a la consulta del usuario
 basándote ÚNICAMENTE en la información proporcionada en los resultados de búsqueda.
@@ -223,14 +243,33 @@ Instrucciones:
 - Si hay información contradictoria, aclárala
 - Cita las fuentes cuando sea apropiado`;
 
+      this.logger.log(`🔑 [GEMINI] API Key available: ${!!this.GEMINI_API_KEY}`);
+      this.logger.log(`🤖 [GEMINI] Initializing Gemini model...`);
+
       const model = this.genAI.getGenerativeModel({
         model: 'gemini-1.5-flash',
       });
+
+      this.logger.log(`📤 [GEMINI] Sending request to Gemini API...`);
+      this.logger.log(`📝 [GEMINI] Prompt length: ${prompt.length} characters`);
+
       const response = await model.generateContent(prompt);
 
-      return response.response.text() || 'No se pudo generar una respuesta.';
+      this.logger.log(`📥 [GEMINI] Received response from Gemini API`);
+      const responseText = response.response.text();
+      this.logger.log(`📝 [GEMINI] Response text length: ${responseText?.length || 0}`);
+      this.logger.log(`📝 [GEMINI] Response text preview: ${responseText?.substring(0, 200) + '...' || 'No response text'}`);
+
+      return responseText || 'No se pudo generar una respuesta.';
     } catch (error) {
-      this.logger.error('Error generating AI response:', error);
+      this.logger.error('❌ [GEMINI] Error generating AI response:', error);
+      this.logger.error('❌ [GEMINI] Error details:', {
+        message: error instanceof Error ? error.message : 'Unknown error',
+        stack: error instanceof Error ? error.stack : undefined,
+        name: error instanceof Error ? error.name : undefined,
+        code: (error as any)?.code || 'No code',
+        status: (error as any)?.status || 'No status'
+      });
       return 'Lo siento, no pude generar una respuesta inteligente en este momento. Pero puedes revisar los resultados de búsqueda a continuación.';
     }
   }
