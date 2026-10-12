@@ -1,98 +1,247 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+# WayuuLingo API — Búsqueda Semántica Wayuu + IA Generativa
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+> **Estado**: ✅ Producción en Vercel · Limpieza de secretos completada (oct 2025)  
+> **Demo**: [https://api-wayuulingo.vercel.app](https://api-wayuulingo.vercel.app)  
+> **Stack**: NestJS 10 + TypeScript + Qdrant Cloud + Google Gemini
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+---
 
-## Description
+## 🎯 Qué hace
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+API REST para búsqueda semántica y generación de respuestas en **Wayuunaiki** (lengua Wayuu):
 
-## Project setup
+| Endpoint | Descripción |
+|----------|-------------|
+| `POST /search/semantic` | Búsqueda vectorial en Qdrant + respuesta generada con Gemini 1.5 Flash |
+| `GET /health` | Health check |
 
-```bash
-$ npm install
+**Flujo**:
+1. Recibe consulta en español/wayuunaiki
+2. Genera embedding con Gemini `text-embedding-004` (768 dims → truncado a 384 para Qdrant)
+3. Busca top-10 en Qdrant Cloud, re-rankea y toma top-5
+4. Construye contexto con fragmentos (fuente, chunk, score)
+5. Llama a Gemini 1.5 Flash con prompt especializado en lengua Wayuu
+6. Devuelve resultados + respuesta generada
+
+---
+
+## 🏗️ Arquitectura
+
+```
+┌─────────────┐     ┌──────────────┐     ┌─────────────┐
+│   Cliente   │────▶│  NestJS API  │────▶│   Qdrant    │
+│  (Web/App)  │     │  (Vercel)    │     │   Cloud     │
+└─────────────┘     └──────┬───────┘     └─────────────┘
+                           │
+                    ┌──────▼───────┐
+                    │  Gemini AI   │
+                    │ (embeddings  │
+                    │  + generate) │
+                    └──────────────┘
 ```
 
-## Compile and run the project
+- **Framework**: NestJS con módulo `SearchModule` (`SearchController` + `SearchService`)
+- **Vector DB**: Qdrant Cloud (colección `wayuucollection`, 384 dimensiones)
+- **Embeddings**: Gemini `text-embedding-004` con fallback hash-based si falla el proveedor
+- **Generación**: Gemini `gemini-1.5-flash` con prompt cultural Wayuu
+- **Logging**: Winston-style (`Logger` de NestJS) con detalle exhaustivo (embedding, scores, fuentes, errores)
+
+---
+
+## 📦 Stack
+
+| Capa | Tecnología |
+|------|------------|
+| Framework | NestJS 10 (TypeScript) |
+| Runtime | Node.js 20+ |
+| Vector DB | Qdrant Cloud (`@qdrant/js-client-rest`) |
+| IA / LLM | Google Generative AI (`@google/generative-ai`) |
+| Despliegue | Vercel (serverless functions) |
+| Tests | Jest (unit + e2e) |
+| Lint/Format | ESLint 9 + Prettier |
+
+---
+
+## 🚀 Puesta en marcha
 
 ```bash
-# development
-$ npm run start
+# 1. Clonar e instalar
+git clone https://github.com/fredygallego8/wayuulingo-api.git
+cd wayuulingo-api
+npm install
 
-# watch mode
-$ npm run start:dev
+# 2. Variables de entorno
+cp .env.example .env
+# Editar .env con tus valores (ver sección abajo)
 
-# production mode
-$ npm run start:prod
+# 3. Desarrollo
+npm run start:dev    # http://localhost:3000
+npm run test         # Unit tests
+npm run test:e2e     # E2E tests
+npm run test:cov     # Cobertura
+npm run build        # Build producción
+npm run lint         # ESLint
 ```
 
-## Run tests
+---
+
+## ⚙️ Variables de entorno (`.env`)
+
+| Variable | Requerida | Descripción |
+|----------|-----------|-------------|
+| `QDRANT_URL` | ✅ | URL cluster Qdrant Cloud (p.ej. `https://xxx.gcp.cloud.qdrant.io`) |
+| `QDRANT_API_KEY` | ✅ | API Key de Qdrant Cloud |
+| `COLLECTION_NAME` | ✅ | Nombre de la colección (default: `wayuucollection`) |
+| `GEMINI_API_KEY` | ✅ | Clave Google AI Studio |
+| `DATABASE_URL` | ❌ | PostgreSQL opcional (futuro) |
+| `OPENAI_API_KEY` | ❌ | Alternativa OpenAI (no usada actualmente) |
+| `ANTHROPIC_API_KEY` | ❌ | Alternativa Anthropic (no usada actualmente) |
+
+> **Seguridad**: `.env.example` contiene solo placeholders.  
+> **Historial**: En oct/2025 se eliminaron claves hardcodeadas (commits `816f645` y `2ff1cbb`). Las claves antiguas quedan en el historial de Git — **rotar Qdrant/Gemini si se publica el repo**.
+
+---
+
+## 📁 Estructura del proyecto
+
+```
+src/
+├── app.module.ts           # Módulo raíz
+├── app.controller.ts       # Health check
+├── app.service.ts          # Servicio base
+├── main.ts                 # Bootstrap + global pipes/filters
+├── common/                 # Utilidades compartidas
+│   ├── global-exception.filter.ts  # Filtro global de excepciones
+│   ├── logger.middleware.ts      # Logging HTTP requests
+│   └── error-response.dto.ts     # DTO estandarizado de errores
+└── search/                 # Módulo de búsqueda semántica
+    ├── search.module.ts
+    ├── search.controller.ts      # POST /search/semantic
+    ├── search.service.ts         # Lógica principal (embedding + Qdrant + Gemini)
+    └── dto/
+        └── search.dto.ts         # DTOs de request/response
+```
+
+### `src/search/search.service.ts` — Núcleo
+
+- **`performSemanticSearch(query, limit=10)`** → `AISearchResponse`
+- **Embedding**: Gemini `text-embedding-004` + truncado a 384 dims + fallback hash
+- **Qdrant**: `search()` con `with_payload: true`, `limit: min(10, limit)`
+- **Re-ranking**: Top 5 para contexto del LLM
+- **Prompt**: Especializado en lengua Wayuu (educativo, respetuoso, cita fuentes)
+- **Error handling**: Try/catch exhaustivo + logging estructurado + respuesta degradada
+
+---
+
+## 🧪 Tests
 
 ```bash
-# unit tests
-$ npm run test
-
-# e2e tests
-$ npm run test:e2e
-
-# test coverage
-$ npm run test:cov
+npm run test        # Unit tests (Jest)
+npm run test:e2e    # E2E tests (Supertest)
+npm run test:cov    # Cobertura con reporte
 ```
 
-## Deployment
+**Casos cubiertos**:
+- Controller: health check, búsqueda exitosa, error handling
+- Service: embedding generation (Gemini + fallback), Qdrant search, AI response generation, error paths
+- DTOs: validación de entrada
 
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
+---
 
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
+## 📡 API Reference
 
-```bash
-$ npm install -g mau
-$ mau deploy
+### `POST /search/semantic`
+
+**Request**:
+```json
+{
+  "query": "¿Cómo se saluda en wayuunaiki?",
+  "limit": 10
+}
 ```
 
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
+**Response (200)**:
+```json
+{
+  "query": "¿Cómo se saluda en wayuunaiki?",
+  "results": [
+    {
+      "id": "uuid",
+      "score": 0.87,
+      "payload": {
+        "text": "Wattamat ...",
+        "source": "diccionario_wayuu.pdf",
+        "chunk_index": 0,
+        "total_chunks": 5,
+        "upload_timestamp": 1720000000
+      }
+    }
+  ],
+  "aiResponse": "En wayuunaiki el saludo tradicional es **'Wattamat'**..."
+}
+```
 
-## Resources
+**Response (500)**:
+```json
+{
+  "query": "...",
+  "results": [],
+  "error": "QDRANT_URL environment variable is required"
+}
+```
 
-Check out a few resources that may come in handy when working with NestJS:
+---
 
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
+## ☁️ Despliegue en Vercel
 
-## Support
+1. Conectar repo en Vercel
+2. Configurar **Environment Variables** en Project Settings:
+   - `QDRANT_URL`, `QDRANT_API_KEY`, `COLLECTION_NAME`, `GEMINI_API_KEY`
+3. Build command: `npm run build`
+4. Output directory: `dist` (configurado en `vercel.json`)
+5. Deploy automático en push a `master`
 
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
+**`vercel.json`**:
+```json
+{
+  "buildCommand": "npm run build",
+  "outputDirectory": "dist",
+  "devCommand": "npm run start:dev",
+  "installCommand": "npm install",
+  "framework": "nestjs",
+  "functions": {
+    "src/main.ts": { "maxDuration": 30 }
+  }
+}
+```
 
-## Stay in touch
+---
 
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
+## 📝 Licencia
 
-## License
+**MIT License** — ver [LICENSE](LICENSE) (pendiente añadir al repo).
 
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+---
+
+## 🤝 Contribuir
+
+1. Fork → rama `feat/mi-mejora`
+2. `npm run test` + `npm run lint` en verde
+3. Commit convencional: `feat(search): descripción`
+4. PR con descripción y tests
+
+---
+
+## 📚 Referencias
+
+- [NestJS Docs](https://docs.nestjs.com/)
+- [Qdrant JS Client](https://github.com/qdrant/qdrant-js)
+- [Gemini API](https://ai.google.dev/)
+- [Vercel + NestJS](https://vercel.com/docs/concepts/functions/serverless-functions#languages-typescript)
+
+---
+
+## 👤 Autor
+
+**Fredy Gallego** — [@fredygallego8](https://github.com/fredygallego8)  
+Proyecto de preservación y difusión de la lengua Wayuu mediante IA.
